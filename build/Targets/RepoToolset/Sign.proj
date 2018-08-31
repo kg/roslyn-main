@@ -1,0 +1,58 @@
+<!-- All Rights Reserved. Licensed to the .NET Foundation under one or more agreements. The .NET Foundation licenses this file to you under the MIT license. See the LICENSE file in the project root for more information. -->
+<Project DefaultTargets="Sign">
+  <Import Project="BuildStep.props" />
+
+  <Import Project="$(NuGetPackageRoot)microsoft.dotnet.signtool\$(MicrosoftDotNetSignToolVersion)\build\Microsoft.DotNet.SignTool.props" />
+
+  <Target Name="Sign">
+    <Error Text="The value of DotNetSignType is invalid: '$(DotNetSignType)'"
+           Condition="'$(DotNetSignType)' != 'real' and '$(DotNetSignType)' != 'test' and '$(DotNetSignType)' != ''" />
+
+    <PropertyGroup>
+      <DryRun>true</DryRun>
+      <DryRun Condition="'$(OfficialBuild)' == 'true'">false</DryRun>
+
+      <TestSign>false</TestSign>
+      <TestSign Condition="'$(DotNetSignType)' == 'test'">true</TestSign>
+
+      <DesktopMSBuildRequired>false</DesktopMSBuildRequired>
+      <DesktopMSBuildRequired Condition="'$(DryRun)' != 'true' and '$(MSBuildRuntimeType)' == 'Core'">true</DesktopMSBuildRequired>
+    </PropertyGroup>
+
+    <!-- We only need this if we are going to use the executable version. -->
+    <Exec Command='"$(NuGetPackageRoot)vswhere\$(VSWhereVersion)\tools\vswhere.exe" -latest -prerelease -property installationPath -requires Microsoft.Component.MSBuild'
+          ConsoleToMsBuild="true"
+          StandardErrorImportance="high"
+          Condition="$(DesktopMSBuildRequired)">
+      <Output TaskParameter="ConsoleOutput" PropertyName="VSInstallDir" />
+    </Exec>
+
+    <PropertyGroup>
+      <DesktopMSBuildPath Condition="$(DesktopMSBuildRequired)">$(VSInstallDir)\MSBuild\15.0\Bin\msbuild.exe</DesktopMSBuildPath>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <!-- List of container files that will be opened and checked for files that need to be signed. -->
+      <ItemsToSign Include="$(ArtifactsPackagesDir)**\*.nupkg" />
+      <ItemsToSign Include="$(VisualStudioSetupOutputPath)**\*.vsix" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <!-- Default certificate/strong-name to be used for all files with PKT=="31bf3856ad364e35". -->
+      <StrongNameSignInfo Include="MsSharedLib72" PublicKeyToken="31bf3856ad364e35" CertificateName="MicrosoftSHA2" />
+    </ItemGroup>
+
+    <Microsoft.DotNet.SignTool.SignToolTask
+        DryRun="$(DryRun)"
+        TestSign="$(TestSign)"
+        ItemsToSign="@(ItemsToSign)"
+        StrongNameSignInfo="@(StrongNameSignInfo)"
+        FileSignInfo="@(FileSignInfo)"
+        TempDir="$(ArtifactsTmpDir)"
+        LogDir="$(ArtifactsLogDir)"
+        MSBuildPath="$(DesktopMSBuildPath)"
+        MicroBuildCorePath="$(NuGetPackageRoot)microbuild.core\$(MicroBuildCoreVersion)"/>
+       
+  </Target>
+
+</Project>

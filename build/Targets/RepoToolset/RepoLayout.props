@@ -37,5 +37,6 @@
     <ArtifactsPackagesDir>$(ArtifactsConfigurationDir)NuGet\</ArtifactsPackagesDir>
     <ArtifactsShippingPackagesDir>$(ArtifactsPackagesDir)Shipping\</ArtifactsShippingPackagesDir>
     <ArtifactsNonShippingPackagesDir>$(ArtifactsPackagesDir)NonShipping\</ArtifactsNonShippingPackagesDir>
+    <VisualStudioSetupOutputPath>$(ArtifactsConfigurationDir)Vsix\</VisualStudioSetupOutputPath>
   </PropertyGroup>
 </Project>
