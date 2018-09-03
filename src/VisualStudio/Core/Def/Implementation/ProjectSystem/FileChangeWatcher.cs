@@ -46,6 +46,20 @@ namespace Microsoft.VisualStudio.LanguageServices.Implementation.ProjectSystem
             }
         }
 
+        // TODO: remove this when there is a mechanism for a caller of EnqueueWatchingFile
+        // to explicitly wait on that being complete.
+        public void WaitForQueue_TestOnly()
+        {
+            Task queue;
+
+            lock (_taskQueueGate)
+            {
+                queue = _taskQueue;
+            }
+
+            queue.Wait();
+        }
+
         public IContext CreateContext()
         {
             return new Context(this, null);
@@ -163,7 +177,6 @@ namespace Microsoft.VisualStudio.LanguageServices.Implementation.ProjectSystem
                 lock (_gate)
                 {
                     _activeFileWatchingTokens.Add(token);
-
                 }
 
                 _fileChangeWatcher.EnqueueWork(service =>
