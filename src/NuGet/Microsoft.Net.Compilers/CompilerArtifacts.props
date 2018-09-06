@@ -35,16 +35,6 @@
     <CompilerArtifact Include="$(_Dlls)Microsoft.Build.Tasks.CodeAnalysis\net472\Microsoft.Managed.Core.targets"/>
     <CompilerArtifact Include="$(_Dlls)Microsoft.Build.Tasks.CodeAnalysis\net472\Microsoft.CSharp.Core.targets"/>
     <CompilerArtifact Include="$(_Dlls)Microsoft.Build.Tasks.CodeAnalysis\net472\Microsoft.VisualBasic.Core.targets"/>
-    
-    <!-- The assemblies are not signed by us and any deployed copy can be used.
-         The Exes\Toolset directory specifically has all of the assemblies we need.
-
-         N.B. This list of facades must be kept in-sync with the
-         other facades used by the compiler. Facades are listed in
-         the src/Setup/DevDivInsertionFiles/BuildDevDivInsertionFiles.vb file, the
-         src/Setup/DevDivVsix/CompilersPackage/Microsoft.CodeAnalysis.Compilers.swr file,
-         and src/Compilers/Extension/CompilerExtension.csproj file. -->
     <CompilerArtifact Include="$(_Exes)csi\net472\System.*.dll"/>
-    <CompilerArtifact Include="$(_Exes)csi\net472\Microsoft.Win32.Primitives.dll"/>
   </ItemGroup>
 </Project>
