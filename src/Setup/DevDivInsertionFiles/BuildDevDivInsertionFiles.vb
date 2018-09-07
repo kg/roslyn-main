@@ -58,16 +58,15 @@ Public Class BuildDevDivInsertionFiles
 
         ' Build a dependency map
         Dim dependencies = BuildDependencyMap(_binDirectory)
-        GenerateContractsListMsbuild(dependencies)
         GenerateAssemblyVersionList(dependencies)
         CopyDependencies(dependencies)
     End Sub
 
     Private Class DependencyInfo
-        ' For example, "ref/net46"
+        ' For example, "ref/net472"
         Public ContractDir As String
 
-        ' For example, "lib/net46"
+        ' For example, "lib/net472"
         Public ImplementationDir As String
 
         ' For example, "System.AppContext"
@@ -98,7 +97,7 @@ Public Class BuildDevDivInsertionFiles
 
         For Each projectLockJson In files
             Dim items = JsonConvert.DeserializeObject(File.ReadAllText(projectLockJson))
-            Const targetFx = ".NETFramework,Version=v4.6/win"
+            Const targetFx = ".NETFramework,Version=v4.7.2/win"
 
             Dim targetObj = DirectCast(DirectCast(DirectCast(items, JObject).Property("targets")?.Value, JObject).Property(targetFx)?.Value, JObject)
             If targetObj Is Nothing Then
@@ -172,34 +171,6 @@ Public Class BuildDevDivInsertionFiles
         Next
 
         Return result
-    End Function
-
-    Private Sub GenerateContractsListMsbuild(dependencies As IReadOnlyDictionary(Of String, DependencyInfo))
-        Using writer = New StreamWriter(GetAbsolutePathInOutputDirectory("ProductData\ContractAssemblies.props"))
-            writer.WriteLine("<?xml version=""1.0"" encoding=""utf-8""?>")
-            writer.WriteLine("<Project ToolsVersion=""14.0"" xmlns=""http://schemas.microsoft.com/developer/msbuild/2003"">")
-            writer.WriteLine("  <!-- Generated file, do not directly edit. Contact mlinfraswat@microsoft.com if you need to add a library that's not listed -->")
-            writer.WriteLine("  <PropertyGroup>")
-
-            For Each entry In GetContracts(dependencies)
-                writer.WriteLine($"    <{entry.Key}>{entry.Value}</{entry.Key}>")
-            Next
-
-            writer.WriteLine("  </PropertyGroup>")
-            writer.WriteLine("</Project>")
-        End Using
-    End Sub
-
-    Private Iterator Function GetContracts(dependencies As IReadOnlyDictionary(Of String, DependencyInfo)) As IEnumerable(Of KeyValuePair(Of String, String))
-        For Each entry In dependencies.OrderBy(Function(e) e.Key)
-            Dim fileName = entry.Key
-            Dim dependency = entry.Value
-            If dependency.ContractDir IsNot Nothing Then
-                Dim variableName = "FXContract_" + Path.GetFileNameWithoutExtension(fileName).Replace(".", "_")
-                Dim dir = Path.Combine(dependency.PackageName, dependency.ContractDir)
-                Yield New KeyValuePair(Of String, String)(variableName, Path.Combine(dir, fileName))
-            End If
-        Next
     End Function
 
     Private Sub GenerateAssemblyVersionList(dependencies As IReadOnlyDictionary(Of String, DependencyInfo))
