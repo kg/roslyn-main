@@ -269,8 +269,6 @@ function Build-ExtraSignArtifacts() {
 
     Push-Location (Join-Path $repoDir "src\Setup")
     try {
-        Write-Host "Building PortableFacades Swix"
-        Run-MSBuild "DevDivVsix\PortableFacades\PortableFacades.swixproj"
         Write-Host "Building CompilersCodeAnalysis Swix"
         Run-MSBuild "DevDivVsix\CompilersPackage\Microsoft.CodeAnalysis.Compilers.swixproj"
 
@@ -301,7 +299,6 @@ function Build-InsertionItems() {
             $extraArgs = " /p:FinalizeValidate=false /p:ManifestPublishUrl=https://vsdrop.corp.microsoft.com/file/v1/Products/DevDiv/dotnet/roslyn/master/20160729.6"
         }
 
-        Run-MSBuild "DevDivVsix\PortableFacades\PortableFacades.vsmanproj" -buildArgs $extraArgs
         Run-MSBuild "DevDivVsix\CompilersPackage\Microsoft.CodeAnalysis.Compilers.vsmanproj" -buildArgs $extraArgs
         Run-MSBuild "DevDivVsix\MicrosoftCodeAnalysisLanguageServices\Microsoft.CodeAnalysis.LanguageServices.vsmanproj" -buildArgs "$extraArgs"
     }
