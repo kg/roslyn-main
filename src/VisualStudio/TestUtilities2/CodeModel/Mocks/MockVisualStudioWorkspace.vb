@@ -9,7 +9,7 @@ Imports Microsoft.VisualStudio.LanguageServices.Implementation.Interop
 Imports Microsoft.VisualStudio.LanguageServices.Implementation.Library.ObjectBrowser.Lists
 Imports Microsoft.VisualStudio.LanguageServices.Implementation.ProjectSystem
 
-Namespace Microsoft.VisualStudio.LanguageServices.UnitTests
+Namespace Microsoft.VisualStudio.LanguageServices.UnitTests.CodeModel.Mocks
     Friend Class MockVisualStudioWorkspace
         Inherits VisualStudioWorkspace
 
@@ -48,6 +48,10 @@ Namespace Microsoft.VisualStudio.LanguageServices.UnitTests
 
         Public Overrides Function GetHierarchy(projectId As ProjectId) As Microsoft.VisualStudio.Shell.Interop.IVsHierarchy
             Return Nothing
+        End Function
+
+        Friend Overrides Function GetProjectGuid(projectId As ProjectId) As Guid
+            Return Guid.Empty
         End Function
 
         Friend Overrides Function OpenInvisibleEditor(documentId As DocumentId) As IInvisibleEditor
