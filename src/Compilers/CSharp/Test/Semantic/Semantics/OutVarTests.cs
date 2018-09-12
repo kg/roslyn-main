@@ -12667,7 +12667,8 @@ public class X
             VerifyModelForOutVarWithoutDataFlow(model, y4Decl, y4Ref);
         }
 
-        [ConditionalFact(typeof(DesktopOnly), Reason = "https://github.com/dotnet/roslyn/issues/28026")]
+        [ConditionalFact(typeof(DesktopClrOnly), Reason = "https://github.com/dotnet/roslyn/issues/28026")]
+        [WorkItem(10562, "https://github.com/mono/mono/issues/10562")]
         public void Query_01()
         {
             var source =
