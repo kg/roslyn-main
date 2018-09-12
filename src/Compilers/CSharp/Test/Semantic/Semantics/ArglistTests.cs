@@ -1601,7 +1601,8 @@ class Program
                 Diagnostic(ErrorCode.ERR_CantUseInOrOutInArglist, "a").WithLocation(7, 24));
         }
 
-        [ConditionalFact(typeof(DesktopOnly), Reason = ConditionalSkipReason.RestrictedTypesNeedDesktop)]
+        [ConditionalFact(typeof(DesktopClrOnly), Reason = ConditionalSkipReason.RestrictedTypesNeedDesktop)]
+        [WorkItem(10566, "https://github.com/mono/mono/issues/10566")]
         public void ArgListMayHaveARefArgument()
         {
             CompileAndVerify(@"
