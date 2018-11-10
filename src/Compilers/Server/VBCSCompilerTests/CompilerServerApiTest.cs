@@ -344,11 +344,11 @@ class Hello
                     var source = new TaskCompletionSource<bool>();
                     var thread = new Thread(_ =>
                     {
-                        Mutex mutex = null;
+                        IDisposable mutex = null;
                         try
                         {
-                            Assert.True(Mutex.TryOpenExisting(mutexName, out mutex));
-                            Assert.False(mutex.WaitOne(millisecondsTimeout: 0));
+                            Assert.True(BuildServerConnection.TryOpenMutex(mutexName, out mutex));
+                            Assert.False(BuildServerConnection.WaitMutex(mutex, 0));
                             source.SetResult(true);
                         }
                         catch (Exception ex)

@@ -39,6 +39,8 @@ namespace Microsoft.CodeAnalysis.CommandLine
                 // Check if the environment
                 string loggingFileName = Environment.GetEnvironmentVariable(environmentVariable);
 
+                Console.WriteLine("loggingFileName={0}", loggingFileName);
+
                 if (loggingFileName != null)
                 {
                     // If the environment variable contains the path of a currently existing directory,

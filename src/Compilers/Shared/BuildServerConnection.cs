@@ -105,6 +105,8 @@ namespace Microsoft.CodeAnalysis.CommandLine
             Func<string, string, bool> tryCreateServerFunc,
             CancellationToken cancellationToken)
         {
+            Console.WriteLine("RunServerCompilationCore pipeName={0}", pipeName);
+
             if (pipeName == null)
             {
                 return new RejectedBuildResponse();
@@ -125,14 +127,15 @@ namespace Microsoft.CodeAnalysis.CommandLine
             var timeoutNewProcess = timeoutOverride ?? TimeOutMsNewProcess;
             var timeoutExistingProcess = timeoutOverride ?? TimeOutMsExistingProcess;
             Task<NamedPipeClientStream> pipeTask = null;
-            Mutex clientMutex = null;
+            IDisposable clientMutex = null;
             var holdsMutex = false;
             try
             {
                 try
                 {
+                    Console.WriteLine("Trying to create mutex");
                     var clientMutexName = GetClientMutexName(pipeName);
-                    clientMutex = new Mutex(initiallyOwned: true, name: clientMutexName, out holdsMutex);
+                    clientMutex = CreateMutex(initiallyOwned: true, name: clientMutexName, out holdsMutex);
                 }
                 catch
                 {
@@ -148,7 +151,8 @@ namespace Microsoft.CodeAnalysis.CommandLine
                 {
                     try
                     {
-                        holdsMutex = clientMutex.WaitOne(timeoutNewProcess);
+                        Console.WriteLine("Trying to acquire mutex");
+                        holdsMutex = WaitMutex(clientMutex, timeoutNewProcess);
 
                         if (!holdsMutex)
                         {
@@ -163,13 +167,18 @@ namespace Microsoft.CodeAnalysis.CommandLine
 
                 // Check for an already running server
                 var serverMutexName = GetServerMutexName(pipeName);
-                bool wasServerRunning = WasServerMutexOpen(serverMutexName);
+                bool wasServerRunning = WasServerMutexOpen(serverMutexName) || true;
                 var timeout = wasServerRunning ? timeoutExistingProcess : timeoutNewProcess;
+
+                Console.WriteLine("Trying to connect, wasServerRunning={0}", wasServerRunning);
 
                 if (wasServerRunning || tryCreateServerFunc(clientDir, pipeName))
                 {
                     pipeTask = TryConnectToServerAsync(pipeName, timeout, cancellationToken);
+                    Console.WriteLine("Connect started");
                 }
+                else
+                    Console.WriteLine("Not connecting");                
             }
             finally
             {
@@ -177,7 +186,7 @@ namespace Microsoft.CodeAnalysis.CommandLine
                 {
                     if (holdsMutex)
                     {
-                        clientMutex.ReleaseMutex();
+                        ReleaseMutex(clientMutex);
                     }
                     clientMutex.Dispose();
                 }
@@ -188,6 +197,7 @@ namespace Microsoft.CodeAnalysis.CommandLine
                 var pipe = await pipeTask.ConfigureAwait(false);
                 if (pipe != null)
                 {
+                    Console.WriteLine("Trying to request build");
                     var request = BuildRequest.Create(language,
                                                       buildPaths.WorkingDirectory,
                                                       buildPaths.TempDirectory,
@@ -198,8 +208,11 @@ namespace Microsoft.CodeAnalysis.CommandLine
 
                     return await TryCompile(pipe, request, cancellationToken).ConfigureAwait(false);
                 }
+                else
+                    Console.WriteLine("No pipe");
             }
 
+            Console.WriteLine("No pipetask");
             return new RejectedBuildResponse();
         }
 
@@ -519,22 +532,51 @@ namespace Microsoft.CodeAnalysis.CommandLine
         {
             try
             {
-                Mutex mutex;
-                var open = Mutex.TryOpenExisting(mutexName, out mutex);
+                IDisposable mutex;
+                var open = TryOpenMutex(mutexName, out mutex);
                 if (open)
                 {
+                    Console.WriteLine("TryOpenExisting ok");
                     mutex.Dispose();
                     return true;
+                } else {
+                    Console.WriteLine("TryOpenExisting not ok");
                 }
             }
-            catch
+            catch (Exception exc)
             {
+                Console.WriteLine("TryOpenExisting error {0}", exc);
                 // In the case an exception occured trying to open the Mutex then 
                 // the assumption is that it's not open. 
                 return false;
             }
 
             return false;
+        }
+
+        public static bool TryOpenMutex(string mutexName, out IDisposable mutex) {
+            Mutex temp;
+            var result = Mutex.TryOpenExisting(mutexName, out temp);
+            mutex = temp;
+            return result;
+        }
+
+        public static bool WaitMutex(IDisposable mutex, int millisecondsTimeout) {
+            var temp = (Mutex)mutex;
+            return temp.WaitOne(millisecondsTimeout: millisecondsTimeout);
+        }
+
+        public static void ReleaseMutex (IDisposable mutex) {
+            var temp = (Mutex)mutex;
+            temp.ReleaseMutex();
+        }
+
+        public static IDisposable CreateMutex (bool initiallyOwned, string name, out bool createdNew) {
+            return new Mutex(
+                initiallyOwned: initiallyOwned,
+                name: name,
+                createdNew: out createdNew
+            );
         }
 
         internal static string GetServerMutexName(string pipeName)
