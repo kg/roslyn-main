@@ -554,29 +554,125 @@ namespace Microsoft.CodeAnalysis.CommandLine
             return false;
         }
 
+        private class FileMutex : IDisposable {
+            public readonly bool OwnsMutex;
+            public readonly FileStream Stream;
+            public readonly string FilePath;
+
+            public bool Locked { get; private set; }
+
+            public FileMutex (bool initiallyOwned, string name, out bool createdNew) {
+                FilePath = Path.Combine(Path.GetTempPath(), name);
+                FileStream mutex;
+                try {
+                    mutex = new FileStream(FilePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                    createdNew = false;
+                } catch (FileNotFoundException) {
+                    mutex = new FileStream(FilePath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None);
+                    createdNew = true;
+                }
+                OwnsMutex = createdNew;
+                if (initiallyOwned)
+                    if (!Lock())
+                        throw new Exception("Failed to lock mutex");
+            }
+
+            private FileMutex (string mutexName) {
+                FilePath = Path.Combine(Path.GetTempPath(), mutexName);
+                OwnsMutex = false;
+                Stream = new FileStream(FilePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+            }
+
+            public static bool TryOpenExisting (string mutexName, out FileMutex mutex) {
+                try {
+                    mutex = new FileMutex(mutexName);
+                    return true;
+                } catch (FileNotFoundException) {
+                    mutex = null;
+                    return false;
+                }
+            }
+
+            public bool Lock () {
+                if (Locked)
+                    return true;
+
+                try {
+                    Stream.Lock(0, 0);
+                    Locked = true;
+                    return true;
+                } catch {
+                    return false;
+                }
+            }
+
+            public void Unlock () {
+                if (!Locked)
+                    return;
+                Stream.Unlock(0, 0);
+                Locked = false;
+            }
+
+            public void Dispose () {
+                if (Locked)
+                    Unlock();
+                Stream.Dispose();
+                if (OwnsMutex)
+                    File.Delete(FilePath);
+            }
+        }
+
         public static bool TryOpenMutex(string mutexName, out IDisposable mutex) {
-            Mutex temp;
-            var result = Mutex.TryOpenExisting(mutexName, out temp);
-            mutex = temp;
-            return result;
+            if (PlatformInformation.IsRunningOnMono) {
+                FileMutex temp;
+                var result = FileMutex.TryOpenExisting(mutexName, out temp);
+                mutex = temp;
+                return result;
+            } else {
+                Mutex temp;
+                var result = Mutex.TryOpenExisting(mutexName, out temp);
+                mutex = temp;
+                return result;
+            }
         }
 
         public static bool WaitMutex(IDisposable mutex, int millisecondsTimeout) {
-            var temp = (Mutex)mutex;
-            return temp.WaitOne(millisecondsTimeout: millisecondsTimeout);
+            if (PlatformInformation.IsRunningOnMono) {
+                if (millisecondsTimeout != 0)
+                    throw new NotImplementedException("Wait on mutex");
+
+                var fm = (FileMutex)mutex;
+                return fm.Lock();
+            } else {
+                var temp = (Mutex)mutex;
+                return temp.WaitOne(millisecondsTimeout: millisecondsTimeout);
+            }
         }
 
         public static void ReleaseMutex (IDisposable mutex) {
-            var temp = (Mutex)mutex;
-            temp.ReleaseMutex();
+            if (PlatformInformation.IsRunningOnMono) {
+                var fm = (FileMutex)mutex;
+                fm.Unlock();
+            } else {
+                var temp = (Mutex)mutex;
+                temp.ReleaseMutex();
+            }
         }
 
         public static IDisposable CreateMutex (bool initiallyOwned, string name, out bool createdNew) {
-            return new Mutex(
-                initiallyOwned: initiallyOwned,
-                name: name,
-                createdNew: out createdNew
-            );
+            if (PlatformInformation.IsRunningOnMono) {
+                return new FileMutex(
+                    initiallyOwned: initiallyOwned,
+                    name: name,
+                    createdNew: out createdNew
+                );
+            } else {
+                return new Mutex(
+                    initiallyOwned: initiallyOwned,
+                    name: name,
+                    createdNew: out createdNew
+                );
+            }
         }
 
         internal static string GetServerMutexName(string pipeName)
