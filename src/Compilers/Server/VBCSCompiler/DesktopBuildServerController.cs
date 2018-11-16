@@ -110,15 +110,18 @@ namespace Microsoft.CodeAnalysis.CompilerServer
             {
                 if (!holdsMutex)
                 {
+                    Console.WriteLine("Does not hold mutex, exiting");
                     return CommonCompiler.Failed;
                 }
 
                 try
                 {
+                    Console.WriteLine("Running server");
                     return base.RunServerCore(pipeName, connectionHost, listener, keepAlive, cancellationToken);
                 }
                 finally
                 {
+                    Console.WriteLine("Releasing mutex");
                     BuildServerConnection.ReleaseMutex(serverMutex);
                 }
             }

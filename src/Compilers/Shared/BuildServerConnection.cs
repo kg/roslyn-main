@@ -139,6 +139,7 @@ namespace Microsoft.CodeAnalysis.CommandLine
                 }
                 catch
                 {
+                    Console.WriteLine("Creating mutex failed");
                     // The Mutex constructor can throw in certain cases. One specific example is docker containers
                     // where the /tmp directory is restricted. In those cases there is no reliable way to execute
                     // the server and we need to fall back to the command line.
@@ -156,18 +157,21 @@ namespace Microsoft.CodeAnalysis.CommandLine
 
                         if (!holdsMutex)
                         {
+                            Console.WriteLine("Does not hold mutex");
                             return new RejectedBuildResponse();
                         }
+                        Console.WriteLine("Holds mutex");
                     }
                     catch (AbandonedMutexException)
                     {
+                        Console.WriteLine("Abandoned mutex");
                         holdsMutex = true;
                     }
                 }
 
                 // Check for an already running server
                 var serverMutexName = GetServerMutexName(pipeName);
-                bool wasServerRunning = WasServerMutexOpen(serverMutexName) || true;
+                bool wasServerRunning = WasServerMutexOpen(serverMutexName);
                 var timeout = wasServerRunning ? timeoutExistingProcess : timeoutNewProcess;
 
                 Console.WriteLine("Trying to connect, wasServerRunning={0}", wasServerRunning);
@@ -541,6 +545,7 @@ namespace Microsoft.CodeAnalysis.CommandLine
                     return true;
                 } else {
                     Console.WriteLine("TryOpenExisting not ok");
+                    return false;
                 }
             }
             catch (Exception exc)
@@ -550,8 +555,6 @@ namespace Microsoft.CodeAnalysis.CommandLine
                 // the assumption is that it's not open. 
                 return false;
             }
-
-            return false;
         }
 
         private class FileMutex : IDisposable {
@@ -563,18 +566,22 @@ namespace Microsoft.CodeAnalysis.CommandLine
 
             public FileMutex (bool initiallyOwned, string name, out bool createdNew) {
                 FilePath = Path.Combine(Path.GetTempPath(), name);
-                FileStream mutex;
                 try {
-                    mutex = new FileStream(FilePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                    // Open existing mutex
+                    Stream = new FileStream(FilePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
                     createdNew = false;
                 } catch (FileNotFoundException) {
-                    mutex = new FileStream(FilePath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None);
+                    // Create new mutex
+                    Stream = new FileStream(FilePath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None);
                     createdNew = true;
                 }
                 OwnsMutex = createdNew;
-                if (initiallyOwned)
-                    if (!Lock())
-                        throw new Exception("Failed to lock mutex");
+
+                if (initiallyOwned) {
+                    Exception exc;
+                    if (!Lock(out exc))
+                        throw new Exception("Failed to lock mutex", exc);
+                }
             }
 
             private FileMutex (string mutexName) {
@@ -593,7 +600,8 @@ namespace Microsoft.CodeAnalysis.CommandLine
                 }
             }
 
-            public bool Lock () {
+            public bool Lock (out Exception exc) {
+                exc = null;
                 if (Locked)
                     return true;
 
@@ -601,7 +609,8 @@ namespace Microsoft.CodeAnalysis.CommandLine
                     Stream.Lock(0, 0);
                     Locked = true;
                     return true;
-                } catch {
+                } catch (Exception _) {
+                    exc = _;
                     return false;
                 }
             }
@@ -642,7 +651,10 @@ namespace Microsoft.CodeAnalysis.CommandLine
                     throw new NotImplementedException("Wait on mutex");
 
                 var fm = (FileMutex)mutex;
-                return fm.Lock();
+                Exception exc;
+                if (!fm.Lock(out exc))
+                    throw new Exception("Wait failed", exc);
+                return true;
             } else {
                 var temp = (Mutex)mutex;
                 return temp.WaitOne(millisecondsTimeout: millisecondsTimeout);
