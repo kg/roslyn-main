@@ -135,7 +135,7 @@ namespace Microsoft.CodeAnalysis.CommandLine
                 {
                     Console.WriteLine("Trying to create mutex");
                     var clientMutexName = GetClientMutexName(pipeName);
-                    clientMutex = CreateMutex(initiallyOwned: true, name: clientMutexName, out holdsMutex);
+                    clientMutex = OpenOrCreateMutex(initiallyOwned: true, name: clientMutexName, out holdsMutex);
                 }
                 catch
                 {
@@ -536,12 +536,10 @@ namespace Microsoft.CodeAnalysis.CommandLine
         {
             try
             {
-                IDisposable mutex;
-                var open = TryOpenMutex(mutexName, out mutex);
+                var open = DoesMutexExist(mutexName);
                 if (open)
                 {
                     Console.WriteLine("TryOpenExisting ok");
-                    mutex.Dispose();
                     return true;
                 } else {
                     Console.WriteLine("TryOpenExisting not ok");
@@ -557,90 +555,18 @@ namespace Microsoft.CodeAnalysis.CommandLine
             }
         }
 
-        private class FileMutex : IDisposable {
-            public readonly bool OwnsMutex;
-            public readonly FileStream Stream;
-            public readonly string FilePath;
-
-            public bool Locked { get; private set; }
-
-            public FileMutex (bool initiallyOwned, string name, out bool createdNew) {
-                FilePath = Path.Combine(Path.GetTempPath(), name);
-                try {
-                    // Open existing mutex
-                    Stream = new FileStream(FilePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
-                    createdNew = false;
-                } catch (FileNotFoundException) {
-                    // Create new mutex
-                    Stream = new FileStream(FilePath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None);
-                    createdNew = true;
-                }
-                OwnsMutex = createdNew;
-
-                if (initiallyOwned) {
-                    Exception exc;
-                    if (!Lock(out exc))
-                        throw new Exception("Failed to lock mutex", exc);
-                }
-            }
-
-            private FileMutex (string mutexName) {
-                FilePath = Path.Combine(Path.GetTempPath(), mutexName);
-                OwnsMutex = false;
-                Stream = new FileStream(FilePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
-            }
-
-            public static bool TryOpenExisting (string mutexName, out FileMutex mutex) {
-                try {
-                    mutex = new FileMutex(mutexName);
-                    return true;
-                } catch (FileNotFoundException) {
-                    mutex = null;
-                    return false;
-                }
-            }
-
-            public bool Lock (out Exception exc) {
-                exc = null;
-                if (Locked)
-                    return true;
-
-                try {
-                    Stream.Lock(0, 0);
-                    Locked = true;
-                    return true;
-                } catch (Exception _) {
-                    exc = _;
-                    return false;
-                }
-            }
-
-            public void Unlock () {
-                if (!Locked)
-                    return;
-                Stream.Unlock(0, 0);
-                Locked = false;
-            }
-
-            public void Dispose () {
-                if (Locked)
-                    Unlock();
-                Stream.Dispose();
-                if (OwnsMutex)
-                    File.Delete(FilePath);
-            }
-        }
-
-        public static bool TryOpenMutex(string mutexName, out IDisposable mutex) {
+        public static bool DoesMutexExist(string mutexName) {
             if (PlatformInformation.IsRunningOnMono) {
-                FileMutex temp;
-                var result = FileMutex.TryOpenExisting(mutexName, out temp);
-                mutex = temp;
-                return result;
+                bool createdNew;
+                using (var temp = new ServerFileMutexPair(mutexName, out createdNew)) {
+                    Console.WriteLine("Mutex " + mutexName + (createdNew ? "did not exist" : "existed"));
+                    return !createdNew;
+                }
             } else {
                 Mutex temp;
                 var result = Mutex.TryOpenExisting(mutexName, out temp);
-                mutex = temp;
+                if (result)
+                    temp.Dispose();
                 return result;
             }
         }
@@ -650,11 +576,14 @@ namespace Microsoft.CodeAnalysis.CommandLine
                 if (millisecondsTimeout != 0)
                     throw new NotImplementedException("Wait on mutex");
 
-                var fm = (FileMutex)mutex;
+                var fm = (ServerFileMutexPair)mutex;
                 Exception exc;
-                if (!fm.Lock(out exc))
-                    throw new Exception("Wait failed", exc);
-                return true;
+                // FIXME: Retry with timeout or something
+                var acquiredLock = fm.Lock();
+                if (acquiredLock)
+                    fm.Unlock();
+                Console.WriteLine("Mutex wait " + (acquiredLock ? "success" : "failure"));
+                return acquiredLock;
             } else {
                 var temp = (Mutex)mutex;
                 return temp.WaitOne(millisecondsTimeout: millisecondsTimeout);
@@ -663,21 +592,22 @@ namespace Microsoft.CodeAnalysis.CommandLine
 
         public static void ReleaseMutex (IDisposable mutex) {
             if (PlatformInformation.IsRunningOnMono) {
-                var fm = (FileMutex)mutex;
+                var fm = (ServerFileMutexPair)mutex;
                 fm.Unlock();
+                Console.WriteLine("Mutex released");
             } else {
                 var temp = (Mutex)mutex;
                 temp.ReleaseMutex();
             }
         }
 
-        public static IDisposable CreateMutex (bool initiallyOwned, string name, out bool createdNew) {
+        public static IDisposable OpenOrCreateMutex (bool initiallyOwned, string name, out bool createdNew) {
             if (PlatformInformation.IsRunningOnMono) {
-                return new FileMutex(
-                    initiallyOwned: initiallyOwned,
-                    name: name,
-                    createdNew: out createdNew
-                );
+                var result = new ServerFileMutexPair(name, out createdNew);
+                if (initiallyOwned)
+                    result.Lock();
+                Console.WriteLine((createdNew ? "created" : "opened") + " mutex " + name);
+                return result;
             } else {
                 return new Mutex(
                     initiallyOwned: initiallyOwned,
@@ -745,4 +675,92 @@ namespace Microsoft.CodeAnalysis.CommandLine
             return Environment.GetEnvironmentVariable("SYSTEMROOT");
         }
     }
+
+    internal class FileMutex : IDisposable {
+        public readonly bool OwnsMutex;
+        public readonly FileStream Stream;
+        public readonly string FilePath;
+
+        public bool Locked { get; private set; }
+
+        public FileMutex (string name) {
+            FilePath = Path.Combine(Path.GetTempPath(), name);
+            try {
+                // Open existing mutex
+                Stream = new FileStream(FilePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                OwnsMutex = false;
+            } catch (FileNotFoundException) {
+                // Create new mutex
+                Stream = new FileStream(FilePath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None);
+                OwnsMutex = true;
+            }
+        }
+
+        public bool Lock (out Exception exc) {
+            exc = null;
+            if (Locked)
+                return true;
+
+            try {
+                Stream.Lock(0, 0);
+                Locked = true;
+                return true;
+            } catch (Exception _) {
+                exc = _;
+                return false;
+            }
+        }
+
+        public void Unlock () {
+            if (!Locked)
+                return;
+            Stream.Unlock(0, 0);
+            Locked = false;
+        }
+
+        public void Dispose () {
+            if (Locked)
+                Unlock();
+            Stream.Dispose();
+            // FIXME: We need to ensure we don't delete the lock while someone else holds it
+            if (OwnsMutex)
+                File.Delete(FilePath);
+        }
+    }
+
+    internal class ServerFileMutexPair : IDisposable {
+        private readonly FileMutex AliveMutex;
+        private readonly FileMutex HeldMutex;
+
+        public bool IsDisposed { get; private set; }
+
+        public ServerFileMutexPair (string mutexName, out bool createdNew) {
+            AliveMutex = new FileMutex(mutexName + "-alive");
+            HeldMutex = new FileMutex(mutexName + "-held");
+            Exception _;
+            createdNew = AliveMutex.Lock(out _);
+        }
+
+        public bool Lock () {
+            Exception _;
+            return HeldMutex.Lock(out _);
+        }
+
+        public void Unlock () {
+            HeldMutex.Unlock();
+        }
+
+        public void Dispose () {
+            if (IsDisposed)
+                return;
+
+            HeldMutex.Unlock();
+            AliveMutex.Unlock();
+
+            IsDisposed = true;
+            AliveMutex.Dispose();
+            HeldMutex.Dispose();
+        }
+    }
+
 }

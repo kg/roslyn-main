@@ -345,9 +345,11 @@ class Hello
                     var thread = new Thread(_ =>
                     {
                         IDisposable mutex = null;
+                        bool createdNew;
                         try
                         {
-                            Assert.True(BuildServerConnection.TryOpenMutex(mutexName, out mutex));
+                            mutex = BuildServerConnection.OpenOrCreateMutex(false, mutexName, out createdNew);
+                            Assert.False(createdNew);
                             Assert.False(BuildServerConnection.WaitMutex(mutex, 0));
                             source.SetResult(true);
                         }
