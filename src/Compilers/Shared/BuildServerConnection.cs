@@ -105,8 +105,6 @@ namespace Microsoft.CodeAnalysis.CommandLine
             Func<string, string, bool> tryCreateServerFunc,
             CancellationToken cancellationToken)
         {
-            Console.WriteLine("RunServerCompilationCore pipeName={0}", pipeName);
-
             if (pipeName == null)
             {
                 return new RejectedBuildResponse();
@@ -133,13 +131,11 @@ namespace Microsoft.CodeAnalysis.CommandLine
             {
                 try
                 {
-                    Console.WriteLine("Trying to create mutex");
                     var clientMutexName = GetClientMutexName(pipeName);
                     clientMutex = OpenOrCreateMutex(initiallyOwned: true, name: clientMutexName, out holdsMutex);
                 }
                 catch
                 {
-                    Console.WriteLine("Creating mutex failed");
                     // The Mutex constructor can throw in certain cases. One specific example is docker containers
                     // where the /tmp directory is restricted. In those cases there is no reliable way to execute
                     // the server and we need to fall back to the command line.
@@ -152,19 +148,15 @@ namespace Microsoft.CodeAnalysis.CommandLine
                 {
                     try
                     {
-                        Console.WriteLine("Trying to acquire mutex");
                         holdsMutex = WaitMutex(clientMutex, timeoutNewProcess);
 
                         if (!holdsMutex)
                         {
-                            Console.WriteLine("Does not hold mutex");
                             return new RejectedBuildResponse();
                         }
-                        Console.WriteLine("Holds mutex");
                     }
                     catch (AbandonedMutexException)
                     {
-                        Console.WriteLine("Abandoned mutex");
                         holdsMutex = true;
                     }
                 }
@@ -174,15 +166,10 @@ namespace Microsoft.CodeAnalysis.CommandLine
                 bool wasServerRunning = WasServerMutexOpen(serverMutexName);
                 var timeout = wasServerRunning ? timeoutExistingProcess : timeoutNewProcess;
 
-                Console.WriteLine("Trying to connect, wasServerRunning={0}", wasServerRunning);
-
                 if (wasServerRunning || tryCreateServerFunc(clientDir, pipeName))
                 {
                     pipeTask = TryConnectToServerAsync(pipeName, timeout, cancellationToken);
-                    Console.WriteLine("Connect started");
                 }
-                else
-                    Console.WriteLine("Not connecting");                
             }
             finally
             {
@@ -201,7 +188,6 @@ namespace Microsoft.CodeAnalysis.CommandLine
                 var pipe = await pipeTask.ConfigureAwait(false);
                 if (pipe != null)
                 {
-                    Console.WriteLine("Trying to request build");
                     var request = BuildRequest.Create(language,
                                                       buildPaths.WorkingDirectory,
                                                       buildPaths.TempDirectory,
@@ -212,11 +198,8 @@ namespace Microsoft.CodeAnalysis.CommandLine
 
                     return await TryCompile(pipe, request, cancellationToken).ConfigureAwait(false);
                 }
-                else
-                    Console.WriteLine("No pipe");
             }
 
-            Console.WriteLine("No pipetask");
             return new RejectedBuildResponse();
         }
 
@@ -537,18 +520,10 @@ namespace Microsoft.CodeAnalysis.CommandLine
             try
             {
                 var open = DoesMutexExist(mutexName);
-                if (open)
-                {
-                    Console.WriteLine("TryOpenExisting ok");
-                    return true;
-                } else {
-                    Console.WriteLine("TryOpenExisting not ok");
-                    return false;
-                }
+                return open;
             }
-            catch (Exception exc)
+            catch
             {
-                Console.WriteLine("TryOpenExisting error {0}", exc);
                 // In the case an exception occured trying to open the Mutex then 
                 // the assumption is that it's not open. 
                 return false;
@@ -558,10 +533,8 @@ namespace Microsoft.CodeAnalysis.CommandLine
         public static bool DoesMutexExist(string mutexName) {
             if (PlatformInformation.IsRunningOnMono) {
                 bool createdNew;
-                using (var temp = new ServerFileMutexPair(mutexName, out createdNew)) {
-                    Console.WriteLine("Mutex " + mutexName + (createdNew ? "did not exist" : "existed"));
+                using (var temp = new ServerFileMutexPair(mutexName, out createdNew))
                     return !createdNew;
-                }
             } else {
                 Mutex temp;
                 var result = Mutex.TryOpenExisting(mutexName, out temp);
@@ -577,12 +550,9 @@ namespace Microsoft.CodeAnalysis.CommandLine
                     throw new NotImplementedException("Wait on mutex");
 
                 var fm = (ServerFileMutexPair)mutex;
-                Exception exc;
-                // FIXME: Retry with timeout or something
                 var acquiredLock = fm.Lock();
                 if (acquiredLock)
                     fm.Unlock();
-                Console.WriteLine("Mutex wait " + (acquiredLock ? "success" : "failure"));
                 return acquiredLock;
             } else {
                 var temp = (Mutex)mutex;
@@ -594,7 +564,6 @@ namespace Microsoft.CodeAnalysis.CommandLine
             if (PlatformInformation.IsRunningOnMono) {
                 var fm = (ServerFileMutexPair)mutex;
                 fm.Unlock();
-                Console.WriteLine("Mutex released");
             } else {
                 var temp = (Mutex)mutex;
                 temp.ReleaseMutex();
@@ -606,7 +575,6 @@ namespace Microsoft.CodeAnalysis.CommandLine
                 var result = new ServerFileMutexPair(name, out createdNew);
                 if (initiallyOwned)
                     result.Lock();
-                Console.WriteLine((createdNew ? "created" : "opened") + " mutex " + name);
                 return result;
             } else {
                 return new Mutex(
