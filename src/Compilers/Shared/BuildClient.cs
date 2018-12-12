@@ -163,6 +163,20 @@ namespace Microsoft.CodeAnalysis.CommandLine
         {
             BuildResponse buildResponse;
 
+            IDisposable npcs = null;
+            try {
+                // Mono configurations without named pipe support will throw a PNSE at some point in this process.
+                npcs = new System.IO.Pipes.NamedPipeClientStream(".", "nonexistentpipe", System.IO.Pipes.PipeDirection.InOut);
+                npcs.Dispose();
+            } catch (PlatformNotSupportedException) {
+                if (npcs != null) {
+                    // Compensate for broken finalizer in older builds of mono
+                    GC.SuppressFinalize(npcs);
+                }
+                Console.WriteLine("WARNING: /shared was requested but this build of mono does not support named pipes.");
+                return null;
+            }
+
             try
             {
                 var buildResponseTask = RunServerCompilation(
