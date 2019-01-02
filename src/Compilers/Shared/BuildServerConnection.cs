@@ -687,7 +687,6 @@ namespace Microsoft.CodeAnalysis.CommandLine
 
         public bool Lock()
         {
-            exc = null;
             if (Locked)
                 return true;
 
