@@ -164,12 +164,16 @@ namespace Microsoft.CodeAnalysis.CommandLine
             BuildResponse buildResponse;
 
             IDisposable npcs = null;
-            try {
+            try 
+            {
                 // Mono configurations without named pipe support will throw a PNSE at some point in this process.
                 npcs = new System.IO.Pipes.NamedPipeClientStream(".", "nonexistentpipe", System.IO.Pipes.PipeDirection.InOut);
                 npcs.Dispose();
-            } catch (PlatformNotSupportedException) {
-                if (npcs != null) {
+            } 
+            catch (PlatformNotSupportedException) 
+            {
+                if (npcs != null) 
+                {
                     // Compensate for broken finalizer in older builds of mono
                     GC.SuppressFinalize(npcs);
                 }
