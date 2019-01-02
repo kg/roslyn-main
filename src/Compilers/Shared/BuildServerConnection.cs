@@ -696,7 +696,7 @@ namespace Microsoft.CodeAnalysis.CommandLine
                 Locked = true;
                 return true;
             } 
-            catch (Exception _)
+            catch (Exception)
             {
                 return false;
             }
