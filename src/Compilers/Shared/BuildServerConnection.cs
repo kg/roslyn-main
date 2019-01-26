@@ -149,7 +149,7 @@ namespace Microsoft.CodeAnalysis.CommandLine
                 {
                     try
                     {
-                        holdsMutex = WaitMutex(clientMutex);
+                        holdsMutex = clientMutex.TryLock();
 
                         if (!holdsMutex)
                         {
@@ -176,10 +176,6 @@ namespace Microsoft.CodeAnalysis.CommandLine
             {
                 if (clientMutex != null)
                 {
-                    if (holdsMutex)
-                    {
-                        ReleaseMutex(clientMutex);
-                    }
                     clientMutex.Dispose();
                 }
             }
@@ -547,16 +543,6 @@ namespace Microsoft.CodeAnalysis.CommandLine
             }
         }
 
-        public static bool WaitMutex (IServerMutex mutex)
-        {
-            return mutex.TryLock();
-        }
-
-        public static void ReleaseMutex (IServerMutex mutex)
-        {
-            mutex.Unlock();
-        }
-
         public static IServerMutex OpenOrCreateMutex (bool initiallyOwned, string name, out bool createdNew)
         {
             if (PlatformInformation.IsRunningOnMono)
@@ -650,7 +636,7 @@ namespace Microsoft.CodeAnalysis.CommandLine
         public readonly FileStream Stream;
         public readonly string FilePath;
 
-        public bool Locked { get; private set; }
+        public bool IsLocked { get; private set; }
 
         internal static string GetMutexDirectory ()
         {
@@ -682,13 +668,13 @@ namespace Microsoft.CodeAnalysis.CommandLine
 
         public bool TryLock ()
         {
-            if (Locked)
-                return true;
+            if (IsLocked)
+                throw new InvalidOperationException("Lock already held");
 
             try
             {
                 Stream.Lock(0, 0);
-                Locked = true;
+                IsLocked = true;
                 return true;
             }
             catch (Exception)
@@ -699,15 +685,15 @@ namespace Microsoft.CodeAnalysis.CommandLine
 
         public void Unlock ()
         {
-            if (!Locked)
+            if (!IsLocked)
                 return;
             Stream.Unlock(0, 0);
-            Locked = false;
+            IsLocked = false;
         }
 
         public void Dispose ()
         {
-            var wasLocked = Locked;
+            var wasLocked = IsLocked;
             if (wasLocked)
                 Unlock();
             Stream.Dispose();
@@ -721,6 +707,7 @@ namespace Microsoft.CodeAnalysis.CommandLine
         private readonly Mutex Mutex;
 
         public bool IsDisposed { get; private set; }
+        public bool IsLocked { get; private set; }
 
         public ServerNamedMutex (string mutexName, bool createNew)
         {
@@ -741,14 +728,19 @@ namespace Microsoft.CodeAnalysis.CommandLine
         {
             if (IsDisposed)
                 return false;
-            return Mutex.WaitOne(0);
+            if (IsLocked)
+                throw new InvalidOperationException("Lock already held");
+            return IsLocked = Mutex.WaitOne(0);
         }
 
         public void Unlock ()
         {
             if (IsDisposed)
                 return;
+            if (!IsLocked)
+                return;
             Mutex.ReleaseMutex();
+            IsLocked = false;
         }
 
         public void Dispose ()
@@ -757,8 +749,11 @@ namespace Microsoft.CodeAnalysis.CommandLine
                 return;
             IsDisposed = true;
 
-            if (Mutex != null)
-                Mutex.Dispose();
+            if (IsLocked)
+                Mutex?.ReleaseMutex();
+            Mutex?.Dispose();
+
+            IsLocked = false;
         }
     }
 

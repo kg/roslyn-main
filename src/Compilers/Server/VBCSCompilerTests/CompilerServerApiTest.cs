@@ -350,7 +350,7 @@ class Hello
                         {
                             mutex = BuildServerConnection.OpenOrCreateMutex(false, mutexName, out createdNew);
                             Assert.False(createdNew);
-                            Assert.False(BuildServerConnection.WaitMutex(mutex));
+                            Assert.False(mutex.TryLock());
                             source.SetResult(true);
                         }
                         catch (Exception ex)

@@ -113,14 +113,7 @@ namespace Microsoft.CodeAnalysis.CompilerServer
                     return CommonCompiler.Failed;
                 }
 
-                try
-                {
-                    return base.RunServerCore(pipeName, connectionHost, listener, keepAlive, cancellationToken);
-                }
-                finally
-                {
-                    BuildServerConnection.ReleaseMutex(serverMutex);
-                }
+                return base.RunServerCore(pipeName, connectionHost, listener, keepAlive, cancellationToken);
             }
         }
 
