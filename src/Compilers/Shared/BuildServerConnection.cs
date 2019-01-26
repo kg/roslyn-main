@@ -125,7 +125,7 @@ namespace Microsoft.CodeAnalysis.CommandLine
             var timeoutNewProcess = timeoutOverride ?? TimeOutMsNewProcess;
             var timeoutExistingProcess = timeoutOverride ?? TimeOutMsExistingProcess;
             Task<NamedPipeClientStream> pipeTask = null;
-            IDisposable clientMutex = null;
+            IServerMutex clientMutex = null;
             var holdsMutex = false;
 
             try
@@ -149,7 +149,7 @@ namespace Microsoft.CodeAnalysis.CommandLine
                 {
                     try
                     {
-                        holdsMutex = WaitMutex(clientMutex, timeoutNewProcess);
+                        holdsMutex = WaitMutex(clientMutex);
 
                         if (!holdsMutex)
                         {
@@ -542,63 +542,37 @@ namespace Microsoft.CodeAnalysis.CommandLine
             } 
             else 
             {
-                Mutex temp;
-                var result = Mutex.TryOpenExisting(mutexName, out temp);
-                if (result)
-                    temp.Dispose();
-                return result;
+                using (var temp = new ServerNamedMutex(mutexName, false))
+                    return !temp.IsDisposed;
             }
         }
 
-        public static bool WaitMutex(IDisposable mutex, int millisecondsTimeout) 
+        public static bool WaitMutex(IServerMutex mutex) 
         {
-            if (PlatformInformation.IsRunningOnMono) 
-            {
-                if (millisecondsTimeout != 0)
-                    throw new NotImplementedException("Wait on mutex");
-
-                var fm = (ServerFileMutexPair)mutex;
-                var acquiredLock = fm.Lock();
-                if (acquiredLock)
-                    fm.Unlock();
-                return acquiredLock;
-            } 
-            else 
-            {
-                var temp = (Mutex)mutex;
-                return temp.WaitOne(millisecondsTimeout: millisecondsTimeout);
-            }
+            return mutex.TryLock();
         }
 
-        public static void ReleaseMutex(IDisposable mutex) 
+        public static void ReleaseMutex(IServerMutex mutex) 
         {
-            if (PlatformInformation.IsRunningOnMono) 
-            {
-                var fm = (ServerFileMutexPair)mutex;
-                fm.Unlock();
-            }
-            else 
-            {
-                var temp = (Mutex)mutex;
-                temp.ReleaseMutex();
-            }
+            mutex.Unlock();
         }
 
-        public static IDisposable OpenOrCreateMutex(bool initiallyOwned, string name, out bool createdNew)
+        public static IServerMutex OpenOrCreateMutex(bool initiallyOwned, string name, out bool createdNew)
         {
             if (PlatformInformation.IsRunningOnMono)
             {
                 var result = new ServerFileMutexPair(name, out createdNew);
-                if (initiallyOwned)
-                    result.Lock();
+                if (initiallyOwned) {
+                    if (!result.TryLock())
+                        result.Dispose();
+                }
                 return result;
             }
             else
             {
-                return new Mutex(
-                    initiallyOwned: initiallyOwned,
-                    name: name,
-                    createdNew: out createdNew
+                createdNew = initiallyOwned;
+                return new ServerNamedMutex(
+                    name, initiallyOwned
                 );
             }
         }
@@ -662,7 +636,13 @@ namespace Microsoft.CodeAnalysis.CommandLine
         }
     }
 
-    internal class FileMutex : IDisposable 
+    internal interface IServerMutex : IDisposable {
+        bool TryLock();
+        void Unlock();
+        bool IsDisposed { get; }
+    }
+
+    internal sealed class FileMutex : IDisposable 
     {
         public readonly bool OwnsMutex;
         public readonly FileStream Stream;
@@ -670,9 +650,22 @@ namespace Microsoft.CodeAnalysis.CommandLine
 
         public bool Locked { get; private set; }
 
+        internal static string GetMutexDirectory()
+        {
+            var homeDirectory = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            if (String.IsNullOrWhiteSpace(homeDirectory))
+                homeDirectory = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            if (String.IsNullOrWhiteSpace(homeDirectory))
+                homeDirectory = Path.GetTempPath();
+            var result = Path.Combine(homeDirectory, ".roslyn");
+            if (!Directory.Exists(result))
+                Directory.CreateDirectory(result);
+            return result;
+        }
+
         public FileMutex(string name) 
         {
-            FilePath = Path.Combine(Path.GetTempPath(), name);
+            FilePath = Path.Combine(GetMutexDirectory(), name);
             try 
             {
                 Stream = new FileStream(FilePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
@@ -685,7 +678,7 @@ namespace Microsoft.CodeAnalysis.CommandLine
             }
         }
 
-        public bool Lock()
+        public bool TryLock()
         {
             if (Locked)
                 return true;
@@ -712,16 +705,62 @@ namespace Microsoft.CodeAnalysis.CommandLine
 
         public void Dispose()
         {
-            if (Locked)
+            var wasLocked = Locked;
+            if (wasLocked)
                 Unlock();
             Stream.Dispose();
-            // FIXME: We need to ensure we don't delete the lock while someone else holds it
-            if (OwnsMutex)
-                File.Delete(FilePath);
+            // We do not delete the lock file here because there is no reliable way to perform a
+            //  'delete if no one has the file open' operation atomically on *nix. This is a leak.
         }
     }
 
-    internal class ServerFileMutexPair : IDisposable
+    internal sealed class ServerNamedMutex : IServerMutex
+    {
+        private readonly Mutex Mutex;
+
+        public bool IsDisposed { get; private set; }
+
+        public ServerNamedMutex(string mutexName, bool createNew)
+        {
+            bool createdNew;
+            if (createNew)
+                Mutex = new Mutex(
+                    initiallyOwned: true,
+                    name: mutexName,
+                    createdNew: out createdNew
+                );
+            else
+                Mutex.TryOpenExisting(mutexName, out Mutex);
+
+            IsDisposed = (Mutex == null);
+        }
+
+        public bool TryLock()
+        {
+            if (IsDisposed)
+                return false;
+            return Mutex.WaitOne(0);
+        }
+
+        public void Unlock()
+        {
+            if (IsDisposed)
+                return;
+            Mutex.ReleaseMutex();
+        }
+
+        public void Dispose()
+        {
+            if (IsDisposed)
+                return;
+            IsDisposed = true;
+
+            if (Mutex != null)
+                Mutex.Dispose();
+        }
+    }
+
+    internal sealed class ServerFileMutexPair : IServerMutex
     {
         private readonly FileMutex AliveMutex;
         private readonly FileMutex HeldMutex;
@@ -732,16 +771,20 @@ namespace Microsoft.CodeAnalysis.CommandLine
         {
             AliveMutex = new FileMutex(mutexName + "-alive");
             HeldMutex = new FileMutex(mutexName + "-held");
-            createdNew = AliveMutex.Lock();
+            createdNew = AliveMutex.TryLock();
         }
 
-        public bool Lock()
+        public bool TryLock()
         {
-            return HeldMutex.Lock();
+            if (IsDisposed)
+                return false;
+            return HeldMutex.TryLock();
         }
 
         public void Unlock()
         {
+            if (IsDisposed)
+                return;
             HeldMutex.Unlock();
         }
 
@@ -749,13 +792,15 @@ namespace Microsoft.CodeAnalysis.CommandLine
         {
             if (IsDisposed)
                 return;
-
-            HeldMutex.Unlock();
-            AliveMutex.Unlock();
-
             IsDisposed = true;
-            AliveMutex.Dispose();
-            HeldMutex.Dispose();
+
+            try {
+                HeldMutex.Unlock();
+                AliveMutex.Unlock();
+            } finally {
+                AliveMutex.Dispose();
+                HeldMutex.Dispose();
+            }
         }
     }
 
