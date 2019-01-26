@@ -517,8 +517,7 @@ namespace Microsoft.CodeAnalysis.CommandLine
         {
             try
             {
-                var open = DoesMutexExist(mutexName);
-                return open;
+                return DoesMutexExist(mutexName);
             }
             catch
             {
@@ -528,7 +527,7 @@ namespace Microsoft.CodeAnalysis.CommandLine
             }
         }
 
-        public static bool DoesMutexExist (string mutexName)
+        internal static bool DoesMutexExist (string mutexName)
         {
             if (PlatformInformation.IsRunningOnMono)
             {
@@ -543,7 +542,7 @@ namespace Microsoft.CodeAnalysis.CommandLine
             }
         }
 
-        public static IServerMutex OpenOrCreateMutex (bool initiallyOwned, string name, out bool createdNew)
+        internal static IServerMutex OpenOrCreateMutex (bool initiallyOwned, string name, out bool createdNew)
         {
             if (PlatformInformation.IsRunningOnMono)
             {

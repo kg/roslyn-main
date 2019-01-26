@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Pipes;
 using System.Linq;
 using System.Reflection;
 #if NET472
@@ -263,7 +264,7 @@ namespace Microsoft.CodeAnalysis.CommandLine
             try 
             {
                 // Mono configurations without named pipe support will throw a PNSE at some point in this process.
-                npcs = new System.IO.Pipes.NamedPipeClientStream(".", "nonexistentpipe", System.IO.Pipes.PipeDirection.InOut);
+                npcs = new NamedPipeClientStream(".", "nonexistentpipe", PipeDirection.InOut);
                 npcs.Dispose();
                 return true;
             } 
