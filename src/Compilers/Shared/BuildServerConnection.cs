@@ -45,7 +45,7 @@ namespace Microsoft.CodeAnalysis.CommandLine
         /// </summary>
         internal string TempDirectory { get; }
 
-        internal BuildPathsAlt(string clientDir, string workingDir, string sdkDir, string tempDir)
+        internal BuildPathsAlt (string clientDir, string workingDir, string sdkDir, string tempDir)
         {
             ClientDirectory = clientDir;
             WorkingDirectory = workingDir;
@@ -65,13 +65,13 @@ namespace Microsoft.CodeAnalysis.CommandLine
         /// <summary>
         /// Determines if the compiler server is supported in this environment.
         /// </summary>
-        internal static bool IsCompilerServerSupported(string tempPath)
+        internal static bool IsCompilerServerSupported (string tempPath)
         {
             var pipeName = GetPipeNameForPathOpt("");
             return pipeName != null && !IsPipePathTooLong(pipeName, tempPath);
         }
 
-        public static Task<BuildResponse> RunServerCompilation(
+        public static Task<BuildResponse> RunServerCompilation (
             RequestLanguage language,
             string sharedCompilationId,
             List<string> arguments,
@@ -94,7 +94,7 @@ namespace Microsoft.CodeAnalysis.CommandLine
                 cancellationToken: cancellationToken);
         }
 
-        internal static async Task<BuildResponse> RunServerCompilationCore(
+        internal static async Task<BuildResponse> RunServerCompilationCore (
             RequestLanguage language,
             List<string> arguments,
             BuildPathsAlt buildPaths,
@@ -209,7 +209,7 @@ namespace Microsoft.CodeAnalysis.CommandLine
         /// Try to compile using the server. Returns a null-containing Task if a response
         /// from the server cannot be retrieved.
         /// </summary>
-        private static async Task<BuildResponse> TryCompile(NamedPipeClientStream pipeStream,
+        private static async Task<BuildResponse> TryCompile (NamedPipeClientStream pipeStream,
                                                             BuildRequest request,
                                                             CancellationToken cancellationToken)
         {
@@ -271,7 +271,7 @@ namespace Microsoft.CodeAnalysis.CommandLine
         /// if we don't attempt any new I/O after the client disconnects. We start an async I/O here
         /// which serves to check the pipe for disconnection.
         /// </summary>
-        internal static async Task CreateMonitorDisconnectTask(
+        internal static async Task CreateMonitorDisconnectTask (
             PipeStream pipeStream,
             string identifier = null,
             CancellationToken cancellationToken = default(CancellationToken))
@@ -311,7 +311,7 @@ namespace Microsoft.CodeAnalysis.CommandLine
         /// <returns>
         /// An open <see cref="NamedPipeClientStream"/> to the server process or null on failure.
         /// </returns>
-        internal static async Task<NamedPipeClientStream> TryConnectToServerAsync(
+        internal static async Task<NamedPipeClientStream> TryConnectToServerAsync (
             string pipeName,
             int timeoutMs,
             CancellationToken cancellationToken)
@@ -371,7 +371,7 @@ namespace Microsoft.CodeAnalysis.CommandLine
             }
         }
 
-        internal static bool TryCreateServerCore(string clientDir, string pipeName)
+        internal static bool TryCreateServerCore (string clientDir, string pipeName)
         {
             var serverPathWithoutExtension = Path.Combine(clientDir, "VBCSCompiler");
             var serverInfo = RuntimeHostInfo.GetProcessInfo(serverPathWithoutExtension, $"-pipename:{pipeName}");
@@ -454,7 +454,7 @@ namespace Microsoft.CodeAnalysis.CommandLine
         /// <returns>
         /// Null if not enough information was found to create a valid pipe name.
         /// </returns>
-        internal static string GetPipeNameForPathOpt(string compilerExeDirectory)
+        internal static string GetPipeNameForPathOpt (string compilerExeDirectory)
         {
             var basePipeName = GetBasePipeName(compilerExeDirectory);
 
@@ -481,7 +481,7 @@ namespace Microsoft.CodeAnalysis.CommandLine
         /// real file in the temp directory, and there is a limit on how long the path can
         /// be. This will never be true on Windows.
         /// </summary>
-        internal static bool IsPipePathTooLong(string pipeName, string tempPath)
+        internal static bool IsPipePathTooLong (string pipeName, string tempPath)
         {
             if (PlatformInformation.IsUnix)
             {
@@ -497,7 +497,7 @@ namespace Microsoft.CodeAnalysis.CommandLine
             return false;
         }
 
-        internal static string GetBasePipeName(string compilerExeDirectory)
+        internal static string GetBasePipeName (string compilerExeDirectory)
         {
             // Normalize away trailing slashes.  File APIs include / exclude this with no 
             // discernable pattern.  Easiest to normalize it here vs. auditing every caller
@@ -517,7 +517,7 @@ namespace Microsoft.CodeAnalysis.CommandLine
             return basePipeName;
         }
 
-        internal static bool WasServerMutexOpen(string mutexName)
+        internal static bool WasServerMutexOpen (string mutexName)
         {
             try
             {
@@ -532,37 +532,38 @@ namespace Microsoft.CodeAnalysis.CommandLine
             }
         }
 
-        public static bool DoesMutexExist(string mutexName) 
+        public static bool DoesMutexExist (string mutexName)
         {
-            if (PlatformInformation.IsRunningOnMono) 
+            if (PlatformInformation.IsRunningOnMono)
             {
                 bool createdNew;
                 using (var temp = new ServerFileMutexPair(mutexName, out createdNew))
                     return !createdNew;
-            } 
-            else 
+            }
+            else
             {
                 using (var temp = new ServerNamedMutex(mutexName, false))
                     return !temp.IsDisposed;
             }
         }
 
-        public static bool WaitMutex(IServerMutex mutex) 
+        public static bool WaitMutex (IServerMutex mutex)
         {
             return mutex.TryLock();
         }
 
-        public static void ReleaseMutex(IServerMutex mutex) 
+        public static void ReleaseMutex (IServerMutex mutex)
         {
             mutex.Unlock();
         }
 
-        public static IServerMutex OpenOrCreateMutex(bool initiallyOwned, string name, out bool createdNew)
+        public static IServerMutex OpenOrCreateMutex (bool initiallyOwned, string name, out bool createdNew)
         {
             if (PlatformInformation.IsRunningOnMono)
             {
                 var result = new ServerFileMutexPair(name, out createdNew);
-                if (initiallyOwned) {
+                if (initiallyOwned)
+                {
                     if (!result.TryLock())
                         result.Dispose();
                 }
@@ -577,12 +578,12 @@ namespace Microsoft.CodeAnalysis.CommandLine
             }
         }
 
-        internal static string GetServerMutexName(string pipeName)
+        internal static string GetServerMutexName (string pipeName)
         {
             return $"{pipeName}.server";
         }
 
-        internal static string GetClientMutexName(string pipeName)
+        internal static string GetClientMutexName (string pipeName)
         {
             return $"{pipeName}.client";
         }
@@ -592,7 +593,7 @@ namespace Microsoft.CodeAnalysis.CommandLine
         /// is <paramref name="workingDir"/>.  This function must emulate <see cref="Path.GetTempPath"/> as 
         /// closely as possible.
         /// </summary>
-        public static string GetTempPath(string workingDir)
+        public static string GetTempPath (string workingDir)
         {
             if (PlatformInformation.IsUnix)
             {
@@ -636,13 +637,14 @@ namespace Microsoft.CodeAnalysis.CommandLine
         }
     }
 
-    internal interface IServerMutex : IDisposable {
-        bool TryLock();
-        void Unlock();
+    internal interface IServerMutex : IDisposable
+    {
+        bool TryLock ();
+        void Unlock ();
         bool IsDisposed { get; }
     }
 
-    internal sealed class FileMutex : IDisposable 
+    internal sealed class FileMutex : IDisposable
     {
         public readonly bool OwnsMutex;
         public readonly FileStream Stream;
@@ -650,7 +652,7 @@ namespace Microsoft.CodeAnalysis.CommandLine
 
         public bool Locked { get; private set; }
 
-        internal static string GetMutexDirectory()
+        internal static string GetMutexDirectory ()
         {
             var homeDirectory = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             if (String.IsNullOrWhiteSpace(homeDirectory))
@@ -663,39 +665,39 @@ namespace Microsoft.CodeAnalysis.CommandLine
             return result;
         }
 
-        public FileMutex(string name) 
+        public FileMutex (string name)
         {
             FilePath = Path.Combine(GetMutexDirectory(), name);
-            try 
+            try
             {
                 Stream = new FileStream(FilePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
                 OwnsMutex = false;
-            } 
-            catch (FileNotFoundException) 
+            }
+            catch (FileNotFoundException)
             {
                 Stream = new FileStream(FilePath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None);
                 OwnsMutex = true;
             }
         }
 
-        public bool TryLock()
+        public bool TryLock ()
         {
             if (Locked)
                 return true;
 
-            try 
+            try
             {
                 Stream.Lock(0, 0);
                 Locked = true;
                 return true;
-            } 
+            }
             catch (Exception)
             {
                 return false;
             }
         }
 
-        public void Unlock()
+        public void Unlock ()
         {
             if (!Locked)
                 return;
@@ -703,7 +705,7 @@ namespace Microsoft.CodeAnalysis.CommandLine
             Locked = false;
         }
 
-        public void Dispose()
+        public void Dispose ()
         {
             var wasLocked = Locked;
             if (wasLocked)
@@ -720,7 +722,7 @@ namespace Microsoft.CodeAnalysis.CommandLine
 
         public bool IsDisposed { get; private set; }
 
-        public ServerNamedMutex(string mutexName, bool createNew)
+        public ServerNamedMutex (string mutexName, bool createNew)
         {
             bool createdNew;
             if (createNew)
@@ -735,21 +737,21 @@ namespace Microsoft.CodeAnalysis.CommandLine
             IsDisposed = (Mutex == null);
         }
 
-        public bool TryLock()
+        public bool TryLock ()
         {
             if (IsDisposed)
                 return false;
             return Mutex.WaitOne(0);
         }
 
-        public void Unlock()
+        public void Unlock ()
         {
             if (IsDisposed)
                 return;
             Mutex.ReleaseMutex();
         }
 
-        public void Dispose()
+        public void Dispose ()
         {
             if (IsDisposed)
                 return;
@@ -767,37 +769,40 @@ namespace Microsoft.CodeAnalysis.CommandLine
 
         public bool IsDisposed { get; private set; }
 
-        public ServerFileMutexPair(string mutexName, out bool createdNew)
+        public ServerFileMutexPair (string mutexName, out bool createdNew)
         {
             AliveMutex = new FileMutex(mutexName + "-alive");
             HeldMutex = new FileMutex(mutexName + "-held");
             createdNew = AliveMutex.TryLock();
         }
 
-        public bool TryLock()
+        public bool TryLock ()
         {
             if (IsDisposed)
                 return false;
             return HeldMutex.TryLock();
         }
 
-        public void Unlock()
+        public void Unlock ()
         {
             if (IsDisposed)
                 return;
             HeldMutex.Unlock();
         }
 
-        public void Dispose()
+        public void Dispose ()
         {
             if (IsDisposed)
                 return;
             IsDisposed = true;
 
-            try {
+            try
+            {
                 HeldMutex.Unlock();
                 AliveMutex.Unlock();
-            } finally {
+            }
+            finally
+            {
                 AliveMutex.Dispose();
                 HeldMutex.Dispose();
             }
