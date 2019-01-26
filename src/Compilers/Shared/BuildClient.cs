@@ -163,21 +163,8 @@ namespace Microsoft.CodeAnalysis.CommandLine
         {
             BuildResponse buildResponse;
 
-            IDisposable npcs = null;
-            try 
+            if (!AreNamedPipesSupported())
             {
-                // Mono configurations without named pipe support will throw a PNSE at some point in this process.
-                npcs = new System.IO.Pipes.NamedPipeClientStream(".", "nonexistentpipe", System.IO.Pipes.PipeDirection.InOut);
-                npcs.Dispose();
-            } 
-            catch (PlatformNotSupportedException) 
-            {
-                if (npcs != null) 
-                {
-                    // Compensate for broken finalizer in older builds of mono
-                    GC.SuppressFinalize(npcs);
-                }
-                Console.WriteLine("WARNING: /shared was requested but this build of mono does not support named pipes.");
                 return null;
             }
 
@@ -265,6 +252,30 @@ namespace Microsoft.CodeAnalysis.CommandLine
             }
 
             return true;
+        }
+
+        private static bool AreNamedPipesSupported()
+        {
+            if (!PlatformInformation.IsRunningOnMono)
+                return true;
+
+            IDisposable npcs = null;
+            try 
+            {
+                // Mono configurations without named pipe support will throw a PNSE at some point in this process.
+                npcs = new System.IO.Pipes.NamedPipeClientStream(".", "nonexistentpipe", System.IO.Pipes.PipeDirection.InOut);
+                npcs.Dispose();
+                return true;
+            } 
+            catch (PlatformNotSupportedException) 
+            {
+                if (npcs != null) 
+                {
+                    // Compensate for broken finalizer in older builds of mono
+                    GC.SuppressFinalize(npcs);
+                }
+                return false;
+            }
         }
 
         /// <summary>
