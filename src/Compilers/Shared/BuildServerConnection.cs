@@ -682,14 +682,13 @@ namespace Microsoft.CodeAnalysis.CommandLine
                 catch (IOException)
                 {
                     // Lock currently held by someone else
-                    continue;
+                    Thread.Sleep(0);
                 }
                 catch (Exception)
                 {
                     // Something else went wrong.
                     return false;
                 }
-                Thread.Sleep(0);
             } while (sw.ElapsedMilliseconds < timeoutMs);
 
             return false;
