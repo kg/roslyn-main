@@ -537,8 +537,9 @@ namespace Microsoft.CodeAnalysis.CommandLine
             }
             else
             {
-                using (var temp = new ServerNamedMutex(mutexName, false))
-                    return !temp.IsDisposed;
+                bool temp2;
+                using (var temp = new ServerNamedMutex(mutexName, false, out temp2))
+                    return !temp.IsDisposed && !temp2;
             }
         }
 
@@ -556,10 +557,18 @@ namespace Microsoft.CodeAnalysis.CommandLine
             }
             else
             {
-                createdNew = initiallyOwned;
-                return new ServerNamedMutex(
-                    name, initiallyOwned
+                var result = new ServerNamedMutex(
+                    name, initiallyOwned, out createdNew
                 );
+                if (initiallyOwned && !result.IsDisposed) {
+                    if (!result.TryLock()) {
+                        result.Dispose();
+                        createdNew = false;
+                    }
+                } else {
+                    createdNew = false;
+                }
+                return result;
             }
         }
 
@@ -708,17 +717,18 @@ namespace Microsoft.CodeAnalysis.CommandLine
         public bool IsDisposed { get; private set; }
         public bool IsLocked { get; private set; }
 
-        public ServerNamedMutex (string mutexName, bool createNew)
+        public ServerNamedMutex (string mutexName, bool createNew, out bool createdNew)
         {
-            bool createdNew;
-            if (createNew)
+            if (createNew) {
                 Mutex = new Mutex(
                     initiallyOwned: true,
                     name: mutexName,
                     createdNew: out createdNew
                 );
-            else
+            } else {
                 Mutex.TryOpenExisting(mutexName, out Mutex);
+                createdNew = false;
+            }
 
             IsDisposed = (Mutex == null);
         }
