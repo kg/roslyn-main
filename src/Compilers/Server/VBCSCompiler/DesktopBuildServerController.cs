@@ -105,8 +105,8 @@ namespace Microsoft.CodeAnalysis.CompilerServer
             var mutexName = BuildServerConnection.GetServerMutexName(pipeName);
             bool holdsMutex;
             using (var serverMutex = BuildServerConnection.OpenOrCreateMutex(initiallyOwned: true,
-                                               name: mutexName,
-                                               createdNew: out holdsMutex))
+                                                                             name: mutexName,
+                                                                             createdNew: out holdsMutex))
             {
                 if (!holdsMutex)
                 {
