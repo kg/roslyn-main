@@ -104,8 +104,7 @@ namespace Microsoft.CodeAnalysis.CompilerServer
             // exit immediately with a non-zero exit code
             var mutexName = BuildServerConnection.GetServerMutexName(pipeName);
             bool holdsMutex;
-            using (var serverMutex = BuildServerConnection.OpenOrCreateMutex(initiallyOwned: true,
-                                                                             name: mutexName,
+            using (var serverMutex = BuildServerConnection.OpenOrCreateMutex(name: mutexName,
                                                                              createdNew: out holdsMutex))
             {
                 if (!holdsMutex)

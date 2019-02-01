@@ -345,12 +345,9 @@ class Hello
                     var thread = new Thread(_ =>
                     {
                         IServerMutex mutex = null;
-                        bool createdNew;
                         try
                         {
-                            mutex = BuildServerConnection.OpenOrCreateMutex(false, mutexName, out createdNew);
-                            Assert.False(createdNew);
-                            Assert.False(mutex.TryLock(0));
+                            Assert.True(BuildServerConnection.WasServerMutexOpen(mutexName));
                             source.SetResult(true);
                         }
                         catch (Exception ex)

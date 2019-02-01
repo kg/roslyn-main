@@ -132,7 +132,7 @@ namespace Microsoft.CodeAnalysis.CommandLine
                 try
                 {
                     var clientMutexName = GetClientMutexName(pipeName);
-                    clientMutex = OpenOrCreateMutex(initiallyOwned: true, name: clientMutexName, out holdsMutex);
+                    clientMutex = OpenOrCreateMutex(clientMutexName, out holdsMutex);
                 }
                 catch
                 {
@@ -515,7 +515,24 @@ namespace Microsoft.CodeAnalysis.CommandLine
         {
             try
             {
-                return DoesMutexExist(mutexName);
+                if (PlatformInformation.IsRunningOnMono)
+                {
+                    IServerMutex mutex = null;
+                    bool createdNew = false;
+                    try
+                    {
+                        mutex = new ServerFileMutexPair(mutexName, false, out createdNew);
+                        return !createdNew;
+                    }
+                    finally 
+                    {
+                        mutex?.Dispose();
+                    }
+                }
+                else
+                {
+                    return ServerNamedMutex.WasOpen(mutexName);
+                }
             }
             catch
             {
@@ -525,41 +542,15 @@ namespace Microsoft.CodeAnalysis.CommandLine
             }
         }
 
-        internal static bool DoesMutexExist(string mutexName)
-        {
-            IServerMutex mutex = null;
-            bool createdNew = false;
-            try {
-                if (PlatformInformation.IsRunningOnMono)
-                {
-                    mutex = new ServerFileMutexPair(mutexName, false, out createdNew);
-                }
-                else
-                {
-                    mutex = new ServerNamedMutex(mutexName, false, out createdNew);
-                }
-                return !mutex.IsDisposed && !createdNew;
-            } 
-            finally 
-            {
-                mutex?.Dispose();
-            }
-        }
-
-        internal static IServerMutex OpenOrCreateMutex(bool initiallyOwned, string name, out bool createdNew)
+        internal static IServerMutex OpenOrCreateMutex(string name, out bool createdNew)
         {
             if (PlatformInformation.IsRunningOnMono)
             {
-                return new ServerFileMutexPair(name, initiallyOwned, out createdNew);
+                return new ServerFileMutexPair(name, true, out createdNew);
             }
             else
             {
-                var result = new ServerNamedMutex(
-                    name, initiallyOwned, out createdNew
-                );
-                if (result.IsDisposed)
-                    createdNew = false;
-                return result;
+                return new ServerNamedMutex(name, out createdNew);
             }
         }
 
@@ -720,31 +711,34 @@ namespace Microsoft.CodeAnalysis.CommandLine
         public bool IsDisposed { get; private set; }
         public bool IsLocked { get; private set; }
 
-        public ServerNamedMutex(string mutexName, bool createNewLocked, out bool createdNew)
+        public ServerNamedMutex(string mutexName, out bool createdNew)
         {
-            if (createNewLocked) 
-            {
-                Mutex = new Mutex(
-                    initiallyOwned: true,
-                    name: mutexName,
-                    createdNew: out createdNew
-                );
-                if (createdNew)
-                    IsLocked = true;
-            }
-            else
-            {
-                Mutex.TryOpenExisting(mutexName, out Mutex);
-                createdNew = false;
-            }
+            Mutex = new Mutex(
+                initiallyOwned: true,
+                name: mutexName,
+                createdNew: out createdNew
+            );
+            if (createdNew)
+                IsLocked = true;
+        }
 
-            IsDisposed = (Mutex == null);
+        public static bool WasOpen(string mutexName)
+        {
+            Mutex m = null;
+            try
+            {
+                return Mutex.TryOpenExisting(mutexName, out m);
+            }
+            finally
+            {
+                m?.Dispose();
+            }
         }
 
         public bool TryLock(int timeoutMs)
         {
             if (IsDisposed)
-                return false;
+                throw new InvalidOperationException("Mutex disposed");
             if (IsLocked)
                 throw new InvalidOperationException("Lock already held");
             return IsLocked = Mutex.WaitOne(timeoutMs);
@@ -753,9 +747,9 @@ namespace Microsoft.CodeAnalysis.CommandLine
         public void Unlock()
         {
             if (IsDisposed)
-                return;
+                throw new InvalidOperationException("Mutex disposed");
             if (!IsLocked)
-                return;
+                throw new InvalidOperationException("Lock not held");
             Mutex.ReleaseMutex();
             IsLocked = false;
         }
@@ -766,11 +760,15 @@ namespace Microsoft.CodeAnalysis.CommandLine
                 return;
             IsDisposed = true;
 
-            if (IsLocked)
-                Mutex?.ReleaseMutex();
-            Mutex?.Dispose();
-
-            IsLocked = false;
+            try
+            {
+                if (IsLocked)
+                    Mutex.ReleaseMutex();
+            }
+            finally
+            {
+                Mutex.Dispose();
+            }
         }
     }
 
@@ -795,14 +793,14 @@ namespace Microsoft.CodeAnalysis.CommandLine
         public bool TryLock(int timeoutMs)
         {
             if (IsDisposed)
-                return false;
+                throw new InvalidOperationException("Mutex disposed");
             return HeldMutex.TryLock(timeoutMs);
         }
 
         public void Unlock()
         {
             if (IsDisposed)
-                return;
+                throw new InvalidOperationException("Mutex disposed");
             HeldMutex.Unlock();
         }
 

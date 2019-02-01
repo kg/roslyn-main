@@ -273,6 +273,7 @@ namespace Microsoft.CodeAnalysis.CommandLine
                 if (npcs != null) 
                 {
                     // Compensate for broken finalizer in older builds of mono
+                    // https://github.com/mono/mono/commit/2a731f29b065392ca9b44d6613abee2aa413a144
                     GC.SuppressFinalize(npcs);
                 }
                 return false;
