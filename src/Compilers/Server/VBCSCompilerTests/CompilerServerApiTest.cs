@@ -344,7 +344,6 @@ class Hello
                     var source = new TaskCompletionSource<bool>();
                     var thread = new Thread(_ =>
                     {
-                        IServerMutex mutex = null;
                         try
                         {
                             Assert.True(BuildServerConnection.WasServerMutexOpen(mutexName));
@@ -354,10 +353,6 @@ class Hello
                         {
                             source.SetException(ex);
                             throw;
-                        }
-                        finally
-                        {
-                            mutex?.Dispose();
                         }
                     });
 

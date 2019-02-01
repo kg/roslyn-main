@@ -524,7 +524,7 @@ namespace Microsoft.CodeAnalysis.CommandLine
                         mutex = new ServerFileMutexPair(mutexName, false, out createdNew);
                         return !createdNew;
                     }
-                    finally 
+                    finally
                     {
                         mutex?.Dispose();
                     }
@@ -615,8 +615,8 @@ namespace Microsoft.CodeAnalysis.CommandLine
 
     internal interface IServerMutex : IDisposable
     {
-        bool TryLock (int timeoutMs);
-        void Unlock ();
+        bool TryLock(int timeoutMs);
+        void Unlock();
         bool IsDisposed { get; }
     }
 
@@ -784,7 +784,8 @@ namespace Microsoft.CodeAnalysis.CommandLine
             AliveMutex = new FileMutex(mutexName + "-alive");
             HeldMutex = new FileMutex(mutexName + "-held");
             createdNew = AliveMutex.TryLock(0);
-            if (initiallyOwned && createdNew) {
+            if (initiallyOwned && createdNew)
+            {
                 if (!TryLock(0))
                     throw new Exception("Failed to lock mutex after creating it");
             }
