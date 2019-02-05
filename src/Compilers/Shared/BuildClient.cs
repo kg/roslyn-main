@@ -263,8 +263,9 @@ namespace Microsoft.CodeAnalysis.CommandLine
             IDisposable npcs = null;
             try
             {
+                var testPipeName = $"mono-{Guid.NewGuid()}";
                 // Mono configurations without named pipe support will throw a PNSE at some point in this process.
-                npcs = new NamedPipeClientStream(".", "nonexistentpipe", PipeDirection.InOut);
+                npcs = new NamedPipeClientStream(".", testPipeName, PipeDirection.InOut);
                 npcs.Dispose();
                 return true;
             }

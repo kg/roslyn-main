@@ -103,11 +103,11 @@ namespace Microsoft.CodeAnalysis.CompilerServer
             // pipename and consuming excess resources. If someone else holds the mutex
             // exit immediately with a non-zero exit code
             var mutexName = BuildServerConnection.GetServerMutexName(pipeName);
-            bool holdsMutex;
+            bool createdNew;
             using (var serverMutex = BuildServerConnection.OpenOrCreateMutex(name: mutexName,
-                                                                             createdNew: out holdsMutex))
+                                                                             createdNew: out createdNew))
             {
-                if (!holdsMutex)
+                if (!createdNew)
                 {
                     return CommonCompiler.Failed;
                 }

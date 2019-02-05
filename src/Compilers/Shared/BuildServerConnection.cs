@@ -173,10 +173,7 @@ namespace Microsoft.CodeAnalysis.CommandLine
             }
             finally
             {
-                if (clientMutex != null)
-                {
-                    clientMutex.Dispose();
-                }
+                clientMutex?.Dispose();
             }
 
             if (pipeTask != null)
@@ -546,7 +543,7 @@ namespace Microsoft.CodeAnalysis.CommandLine
         {
             if (PlatformInformation.IsRunningOnMono)
             {
-                return new ServerFileMutexPair(name, true, out createdNew);
+                return new ServerFileMutexPair(name, initiallyOwned: true, out createdNew);
             }
             else
             {
@@ -620,9 +617,16 @@ namespace Microsoft.CodeAnalysis.CommandLine
         bool IsDisposed { get; }
     }
 
+    /// <summary>
+    /// An interprocess mutex abstraction based on OS advisory locking (FileStream.Lock/Unlock).
+    /// If multiple processes running as the same user create FileMutex instances with the same name,
+    ///  those instances will all point to the same file somewhere in a selected temporary directory.
+    /// The TryLock method can be used to attempt to acquire the mutex, with Unlock or Dispose used to release.
+    /// Unlike Win32 named mutexes, there is no mechanism for detecting an abandoned mutex. The file
+    ///  will simply revert to being unlocked but remain where it is.
+    /// </summary>
     internal sealed class FileMutex : IDisposable
     {
-        public readonly bool OwnsMutex;
         public readonly FileStream Stream;
         public readonly string FilePath;
 
@@ -631,29 +635,19 @@ namespace Microsoft.CodeAnalysis.CommandLine
         internal static string GetMutexDirectory()
         {
             var homeDirectory = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            if (String.IsNullOrWhiteSpace(homeDirectory))
+            if (string.IsNullOrWhiteSpace(homeDirectory))
                 homeDirectory = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            if (String.IsNullOrWhiteSpace(homeDirectory))
-                homeDirectory = Path.GetTempPath();
+            if (string.IsNullOrWhiteSpace(homeDirectory))
+                homeDirectory = BuildServerConnection.GetTempPath(null);
             var result = Path.Combine(homeDirectory, ".roslyn");
-            if (!Directory.Exists(result))
-                Directory.CreateDirectory(result);
+            Directory.CreateDirectory(result);
             return result;
         }
 
         public FileMutex(string name)
         {
             FilePath = Path.Combine(GetMutexDirectory(), name);
-            try
-            {
-                Stream = new FileStream(FilePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
-                OwnsMutex = false;
-            }
-            catch (FileNotFoundException)
-            {
-                Stream = new FileStream(FilePath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None);
-                OwnsMutex = true;
-            }
+            Stream = new FileStream(FilePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
         }
 
         public bool TryLock(int timeoutMs)
@@ -672,8 +666,12 @@ namespace Microsoft.CodeAnalysis.CommandLine
                 }
                 catch (IOException)
                 {
-                    // Lock currently held by someone else
-                    Thread.Sleep(0);
+                    // Lock currently held by someone else.
+                    // We want to sleep for a short period of time to ensure that other processes
+                    //  have an opportunity to finish their work and relinquish the lock.
+                    // Spinning here (via Yield) would work but risks creating a priority
+                    //  inversion if the lock is held by a lower-priority process.
+                    Thread.Sleep(1);
                 }
                 catch (Exception)
                 {
@@ -772,6 +770,12 @@ namespace Microsoft.CodeAnalysis.CommandLine
         }
     }
 
+    /// <summary>
+    /// Approximates a named mutex with 'locked', 'unlocked' and 'abandoned' states.
+    /// There is no reliable way to detect whether a mutex has been abandoned on some target platforms,
+    ///  so we use the AliveMutex to manually track whether the creator of a mutex is still running,
+    ///  while the HeldMutex represents the actual lock state of the mutex.
+    /// </summary>
     internal sealed class ServerFileMutexPair : IServerMutex
     {
         public readonly FileMutex AliveMutex;

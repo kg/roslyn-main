@@ -350,10 +350,6 @@ namespace Microsoft.CodeAnalysis.CompilerServer
                 // Unable to establish a connection with the client.  The client is responsible for
                 // handling this case.  Nothing else for us to do here.
                 CompilerServerLogger.LogException(ex, "Error creating client named pipe");
-                // It's possible for us to get persistent failures when attempting to handle a
-                // client connection, for example if the socket is in use somehow. We don't want to
-                // spin nonstop and tie up a core if this happens.
-                Thread.Sleep(100);
                 return new ConnectionData(CompletionReason.CompilationNotStarted);
             }
 
